@@ -1,0 +1,83 @@
+name: Deploy CryptoPulse
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:  # Allow manual trigger
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+    
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v2
+    
+    - name: Create .env from secrets
+      run: |
+        cat > .env << EOF
+        AWS_ACCESS_KEY_ID=${{ secrets.AWS_ACCESS_KEY_ID }}
+        AWS_SECRET_ACCESS_KEY=${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        AWS_REGION=${{ secrets.AWS_REGION }}
+        AWS_BUCKET_NAME=${{ secrets.AWS_BUCKET_NAME }}
+        COINGECKO_API_KEY=${{ secrets.COINGECKO_API_KEY }}
+        POSTGRES_HOST=${{ secrets.POSTGRES_HOST }}
+        POSTGRES_PORT=${{ secrets.POSTGRES_PORT }}
+        POSTGRES_USER=${{ secrets.POSTGRES_USER }}
+        POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}
+        POSTGRES_DB=${{ secrets.POSTGRES_DB }}
+        AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://${{ secrets.POSTGRES_USER }}:${{ secrets.POSTGRES_PASSWORD }}@${{ secrets.POSTGRES_HOST }}:${{ secrets.POSTGRES_PORT }}/${{ secrets.POSTGRES_DB }}
+        AIRFLOW_HOME=/home/airflow
+        EOF
+      env:
+        SECRETS_CONTEXT: ${{ toJson(secrets) }}
+    
+    - name: Build Docker image
+      run: |
+        docker build -f Dockerfile.airflow -t cryptopulse-airflow:${{ github.sha }} .
+        docker tag cryptopulse-airflow:${{ github.sha }} cryptopulse-airflow:latest
+    
+    - name: Start services
+      run: |
+        docker-compose down -v || true
+        docker-compose up -d
+    
+    - name: Wait for Airflow to be ready
+      run: |
+        for i in {1..30}; do
+          if docker-compose exec -T airflow-webserver curl -f http://localhost:8080/health | grep -q healthy; then
+            echo "Airflow is healthy"
+            exit 0
+          fi
+          echo "Waiting for Airflow... ($i/30)"
+          sleep 10
+        done
+        echo "Airflow failed to start"
+        docker-compose logs
+        exit 1
+    
+    - name: Verify DAG loaded
+      run: |
+        docker-compose exec -T airflow-webserver airflow dags list | grep cryptopulse_lakehouse_pipeline
+    
+    - name: Check connection to PostgreSQL
+      run: |
+        docker-compose exec -T airflow-webserver airflow db check
+    
+    - name: Check connection to S3
+      run: |
+        docker-compose exec -T airflow-webserver python -c \
+          "import boto3; s3 = boto3.client('s3', aws_access_key_id='${{ secrets.AWS_ACCESS_KEY_ID }}', aws_secret_access_key='${{ secrets.AWS_SECRET_ACCESS_KEY }}', region_name='${{ secrets.AWS_REGION }}'); s3.head_bucket(Bucket='${{ secrets.AWS_BUCKET_NAME }}')" && echo "S3 connection successful"
+    
+    - name: Run DAG manual test
+      run: |
+        docker-compose exec -T airflow-webserver airflow dags test cryptopulse_lakehouse_pipeline 2026-03-27
+    
+    - name: Cleanup
+      if: always()
+      run: |
+        rm -f .env
+        docker-compose down

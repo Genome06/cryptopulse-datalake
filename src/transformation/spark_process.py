@@ -7,7 +7,7 @@ from pyspark.sql.functions import col, current_timestamp, lit
 
 def create_spark_session():
     """
-    Initializes Spark Session with S3A settings.
+    Initializes Spark Session with S3A settings and required packages.
     """
     bucket_name = os.getenv("AWS_BUCKET_NAME")
     access_key = os.getenv("AWS_ACCESS_KEY_ID")
@@ -19,6 +19,7 @@ def create_spark_session():
     return SparkSession.builder \
         .master("spark://spark:7077") \
         .appName("CryptoPulse-Silver-Transformation") \
+        .config("spark.jars.packages", "org.apache.hadoop:hadoop-aws:3.3.4,com.amazonaws:aws-java-sdk-bundle:1.12.262") \
         .config("spark.hadoop.fs.s3a.impl", "org.apache.hadoop.fs.s3a.S3AFileSystem") \
         .config("spark.hadoop.fs.s3a.access.key", access_key) \
         .config("spark.hadoop.fs.s3a.secret.key", secret_key) \

@@ -1,0 +1,65 @@
+name: Build & Test CryptoPulse
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+    
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v2
+    
+    - name: Build Airflow image
+      run: |
+        docker build -f Dockerfile.airflow -t cryptopulse-airflow:latest .
+    
+    - name: Create .env for testing
+      run: |
+        cat > .env << EOF
+        AWS_ACCESS_KEY_ID=${{ secrets.AWS_ACCESS_KEY_ID }}
+        AWS_SECRET_ACCESS_KEY=${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        AWS_REGION=${{ secrets.AWS_REGION }}
+        AWS_BUCKET_NAME=${{ secrets.AWS_BUCKET_NAME }}
+        COINGECKO_API_KEY=${{ secrets.COINGECKO_API_KEY }}
+        POSTGRES_HOST=host.docker.internal
+        POSTGRES_PORT=5432
+        POSTGRES_USER=postgres
+        POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}
+        POSTGRES_DB=postgres
+        AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://postgres:${{ secrets.POSTGRES_PASSWORD }}@host.docker.internal:5432/postgres
+        AIRFLOW_HOME=/home/airflow
+        EOF
+    
+    - name: Validate DAG syntax
+      run: |
+        docker run --rm -v $(pwd)/src:/home/airflow/dags cryptopulse-airflow:latest \
+          python -m py_compile /home/airflow/dags/orchestrator/crypto_dag.py
+    
+    - name: Check Python syntax
+      run: |
+        docker run --rm -v $(pwd)/src:/workspace cryptopulse-airflow:latest \
+          python -m py_compile \
+          /workspace/ingestion/ingest_crypto.py \
+          /workspace/transformation/spark_process.py \
+          /workspace/transformation/gold_analytics.py
+    
+    - name: Security scan (optional)
+      run: |
+        docker run --rm -v $(pwd):/workspace python:3.11 \
+          bash -c "pip install bandit && bandit -r /workspace/src/ -ll || true"
+    
+    - name: Test Docker Compose
+      run: |
+        docker-compose config > /dev/null
+    
+    - name: Cleanup
+      run: |
+        rm -f .env

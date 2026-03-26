@@ -1,23 +1,70 @@
 services:
+  airflow-webserver:
+    build:
+      context: .
+      dockerfile: Dockerfile.airflow
+    container_name: airflow-webserver
+    env_file:
+      - .env
+    environment:
+      AIRFLOW__CORE__DAGS_FOLDER: /opt/airflow/dags
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_HOST}:${POSTGRES_PORT}/${POSTGRES_DB}
+      AIRFLOW_HOME: /opt/airflow
+    ports:
+      - '8090:8080'  # Airflow UI on 8090
+    volumes:
+      - ./src/orchestrator:/opt/airflow/dags
+      - ./src:/opt/airflow/src
+      - ./logs:/opt/airflow/logs
+      - ./.env:/opt/airflow/.env
+    command: >
+      bash -c "airflow db migrate && 
+      airflow users create --username admin --password admin --firstname Admin --lastname User --role Admin --email admin@example.com || true && 
+      airflow webserver"
+    networks:
+      - cryptopulse-network
+
+  airflow-scheduler:
+    build:
+      context: .
+      dockerfile: Dockerfile.airflow
+    container_name: airflow-scheduler
+    env_file:
+      - .env
+    environment:
+      AIRFLOW__CORE__DAGS_FOLDER: /opt/airflow/dags
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_HOST}:${POSTGRES_PORT}/${POSTGRES_DB}
+      AIRFLOW_HOME: /opt/airflow
+    volumes:
+      - ./src/orchestrator:/opt/airflow/dags
+      - ./src:/opt/airflow/src
+      - ./logs:/opt/airflow/logs
+      - ./.env:/opt/airflow/.env
+    command: airflow scheduler
+    networks:
+      - cryptopulse-network
+
   spark:
     image: apache/spark:3.5.0
     container_name: spark-master
     command: >
       bash -c "pip install python-dotenv && 
-      /opt/spark/bin/spark-class org.apache.spark.deploy.master.Master --host spark --port 7077"
+      /opt/spark/bin/spark-class org.apache.spark.deploy.master.Master --host spark --port 7077 --webui-port 8080"
     env_file:
       - .env 
     environment:
       - SPARK_MODE=master
       - HOME=/tmp
     ports:
-      - '8888:8080'
+      - '8888:8080'  # Spark Master UI on 8888
       - '7077:7077'
     volumes:
       - .:/opt/spark/app
     working_dir: /opt/spark/app
     networks:
-      - spark-network
+      - cryptopulse-network
 
   spark-worker:
     image: apache/spark:3.5.0
@@ -38,15 +85,15 @@ services:
       - SPARK_MASTER_URL=spark://spark:7077
       - HOME=/tmp
     ports:
-      - '8082:8082' # ui port for worker
+      - '8091:8082'  # Spark Worker UI on 8091
     depends_on:
       - spark
     volumes:
-      - .:/opt/spark/app # Mount the current directory to the worker container
+      - .:/opt/spark/app
     working_dir: /opt/spark/app
     networks:
-      - spark-network
+      - cryptopulse-network
 
 networks:
-  spark-network:
+  cryptopulse-network:
     driver: bridge
