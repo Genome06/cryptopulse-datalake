@@ -46,7 +46,7 @@ jobs:
     - name: Validate DAG syntax
       run: |
         docker run --rm \
-          --user $(id -u):$(id -g) \
+          --user $(id -u):0 \
           -e PYTHONDONTWRITEBYTECODE=1 \
           -v $(pwd)/src:/home/airflow/dags \
           cryptopulse-airflow:latest \
@@ -61,7 +61,7 @@ jobs:
     - name: Check Python syntax
       run: |
         docker run --rm \
-          --user $(id -u):$(id -g) \
+          --user $(id -u):0 \
           -e PYTHONDONTWRITEBYTECODE=1 \
           -v $(pwd)/src:/workspace \
           cryptopulse-airflow:latest \
