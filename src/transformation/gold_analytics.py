@@ -87,10 +87,11 @@ def run_gold_transformation():
     
     print("Writing analytical tables to Gold Zone...")
     
-    # We use partitionBy to allow historical analysis in Athena/Tableau
-    market_leaders.write.mode("overwrite").partitionBy("report_date").parquet(f"{base_gold_path}/market_leaders/")
-    liquidity_analysis.write.mode("overwrite").partitionBy("report_date").parquet(f"{base_gold_path}/liquidity_analysis/")
-    coin_trends.write.mode("overwrite").partitionBy("report_date").parquet(f"{base_gold_path}/coin_trends/")
+    # Use Dynamic Partition Overwrite: only replaces the partition being written (today's date)
+    # Preserves historical partitions while preventing duplicates if DAG runs multiple times on the same day
+    market_leaders.write.mode("overwrite").option("partitionOverwriteMode", "dynamic").partitionBy("report_date").parquet(f"{base_gold_path}/market_leaders/")
+    liquidity_analysis.write.mode("overwrite").option("partitionOverwriteMode", "dynamic").partitionBy("report_date").parquet(f"{base_gold_path}/liquidity_analysis/")
+    coin_trends.write.mode("overwrite").option("partitionOverwriteMode", "dynamic").partitionBy("report_date").parquet(f"{base_gold_path}/coin_trends/")
 
     print(f"SUCCESS: All 3 Gold analytical tables created for {report_date}")
     spark.stop()
