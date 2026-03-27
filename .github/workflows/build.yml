@@ -77,7 +77,9 @@ jobs:
     
     - name: Test Docker Compose
       run: |
-        docker-compose config > /dev/null
+        sudo apt-get update
+        sudo apt-get install -y docker-compose-v2
+        docker compose config > /dev/null && echo "✓ docker-compose config valid"
     
     - name: Cleanup
       run: |
