@@ -44,10 +44,12 @@ jobs:
         find src -type f -name "*.pyc" -delete || true
     
     - name: Validate DAG syntax
-      env:
-        PYTHONDONTWRITEBYTECODE: "1"
       run: |
-        docker run --rm -v $(pwd)/src:/home/airflow/dags cryptopulse-airflow:latest \
+        docker run --rm \
+          --user $(id -u):$(id -g) \
+          -e PYTHONDONTWRITEBYTECODE=1 \
+          -v $(pwd)/src:/home/airflow/dags \
+          cryptopulse-airflow:latest \
           python -m py_compile /home/airflow/dags/orchestrator/crypto_dag.py
     
     - name: Cleanup Docker cache
@@ -58,7 +60,11 @@ jobs:
     
     - name: Check Python syntax
       run: |
-        docker run --rm -v $(pwd)/src:/workspace cryptopulse-airflow:latest \
+        docker run --rm \
+          --user $(id -u):$(id -g) \
+          -e PYTHONDONTWRITEBYTECODE=1 \
+          -v $(pwd)/src:/workspace \
+          cryptopulse-airflow:latest \
           python -m py_compile \
           /workspace/ingestion/ingest_crypto.py \
           /workspace/transformation/spark_process.py \
