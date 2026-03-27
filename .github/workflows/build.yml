@@ -44,6 +44,8 @@ jobs:
         find src -type f -name "*.pyc" -delete || true
     
     - name: Validate DAG syntax
+      env:
+        PYTHONDONTWRITEBYTECODE: "1"
       run: |
         docker run --rm -v $(pwd)/src:/home/airflow/dags cryptopulse-airflow:latest \
           python -m py_compile /home/airflow/dags/orchestrator/crypto_dag.py

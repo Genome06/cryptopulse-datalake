@@ -1,5 +1,9 @@
 FROM apache/airflow:2.8.1-python3.11
 
+# Set environment variables to prevent Python from writing bytecode
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+
 # Install minimal Java runtime using apt with error handling
 USER root
 RUN apt-get update && \
@@ -13,7 +17,7 @@ RUN java -version
 # Switch to airflow user and install Python packages
 USER airflow
 RUN pip install --no-cache-dir --retries 5 \
-    boto3==1.26.137 \
+    boto3==1.28.85 \
     requests==2.31.0 \
     python-dotenv==1.0.0 \
     pyspark==3.5.0 \

@@ -1,4 +1,4 @@
-boto3==1.26.137
+boto3==1.28.85
 python-dotenv==1.0.0
 pyspark==3.5.0
 pyathena==3.30.1
