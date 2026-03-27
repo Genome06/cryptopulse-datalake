@@ -77,6 +77,23 @@ Silver Layer → Gold Layer (S3)
    - Spark Master: http://localhost:8888
    - Spark Worker: http://localhost:8091
 
+## 📋 Deployment Guides
+
+### For Different Scenarios:
+
+| Need | Guide | Time |
+|------|-------|------|
+| **Local testing** | [Local Deployment](/.github/workflows/local-deploy.md) | 10 min |
+| **GitHub setup** | [GitHub Setup Guide](./GITHUB_SETUP.md) | 15 min |
+| **Production CI/CD** | [AWS RDS Setup](./AWS_RDS_SETUP.md) | 30 min |
+| **Streamlit dashboard** | See [Live Dashboard](#-live-dashboard---streamlit-cloud-deployment) section below | 5 min |
+| **Full deployment** | [Deployment Guide](./DEPLOYMENT.md) | 1 hour |
+
+**Quick decision**:
+- 🔧 **Testing on local machine?** → Use [Local Deployment](/.github/workflows/local-deploy.md)
+- 🚀 **Production + GitHub Actions?** → Use [AWS RDS Setup](./AWS_RDS_SETUP.md)
+- 📊 **Analytics dashboard?** → Use [Live Dashboard](#-live-dashboard---streamlit-cloud-deployment) below
+
 ## Pipeline Details
 
 ### DAG: cryptopulse_lakehouse_pipeline

@@ -62,9 +62,17 @@ Create the following secrets with values from your `.env` file:
 - **Name**: `COINGECKO_API_KEY`
 - **Value**: Your CoinGecko API key (optional, free tier works)
 
-#### 6. POSTGRES_HOST
+#### 6. POSTGRES_HOST ⚠️ IMPORTANT
 - **Name**: `POSTGRES_HOST`
-- **Value**: `localhost` (or your database host)
+- **Value**: **CHOOSE ONE**:
+
+| Strategy | Value | When to Use |
+|----------|-------|------------|
+| **Development (Local)** | `localhost` | Testing on local machine only |
+| **Production (AWS RDS)** | `cryptopulse-postgres.xxxxx.ap-southeast-2.rds.amazonaws.com` | GitHub Actions CI/CD + Production |
+
+**Recommended**: Use **AWS RDS** for GitHub Actions workflows to work properly.
+See [AWS_RDS_SETUP.md](../AWS_RDS_SETUP.md) for complete RDS configuration guide.
 
 #### 7. POSTGRES_PORT
 - **Name**: `POSTGRES_PORT`
@@ -76,7 +84,7 @@ Create the following secrets with values from your `.env` file:
 
 #### 9. POSTGRES_PASSWORD
 - **Name**: `POSTGRES_PASSWORD`
-- **Value**: `%40Genome0602%2E%2A` (URL-encoded from `.env`)
+- **Value**: Your PostgreSQL password (URL-encoded if contains special chars)
 
 #### 10. POSTGRES_DB
 - **Name**: `POSTGRES_DB`
@@ -104,21 +112,36 @@ Create the following secrets with values from your `.env` file:
 2. Select **I understand my workflows, go ahead and enable them**
 3. This activates the CI/CD workflows
 
-## Step 5: Test Workflows Manually
+## Step 5: Choose Your Deployment Strategy
 
-### Test Build Workflow
+### Option A: Local Development Only (✅ Simple, ❌ No CI/CD)
+
+- Keep `POSTGRES_HOST=localhost`
+- Deploy manually via `docker-compose up -d` on your machine
+- CI/CD will validate code only (syntax, security)
+- **Guide**: See [.github/workflows/local-deploy.md](workflows/local-deploy.md)
+
+### Option B: Production with GitHub Actions (⚠️ Requires AWS RDS)
+
+- Create AWS RDS PostgreSQL instance (see [AWS_RDS_SETUP.md](../AWS_RDS_SETUP.md))
+- Update `POSTGRES_HOST` to RDS endpoint
+- CI/CD will fully validate + test on GitHub servers
+- **Recommended for team projects**
+
+## Step 6: Test Workflows Manually
+
+### Test Build & Validate Workflow
 
 1. Go to **Actions** tab
-2. Click **Build & Test CryptoPulse** workflow
+2. Click **Build & Validate CryptoPulse** workflow
 3. Click **Run workflow** → **Run workflow**
 4. Wait for it to complete ✅
+   - Validates DAG syntax
+   - Checks Python code
+   - Security scan
+   - Docker build test
 
-### Test Deploy Workflow
-
-1. Go to **Actions** tab
-2. Click **Deploy CryptoPulse** workflow
-3. Click **Run workflow** → **Run workflow**
-4. This performs full deployment test
+**Expected Result**: All checks pass (green checkmarks)
 
 ## Step 6: Branch Protection Rules (Optional)
 

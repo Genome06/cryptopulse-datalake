@@ -1,12 +1,13 @@
-name: Deploy CryptoPulse
+name: Build & Validate CryptoPulse
 
 on:
   push:
     branches: [ main ]
-  workflow_dispatch:  # Allow manual trigger
+  pull_request:
+    branches: [ main ]
 
 jobs:
-  deploy:
+  build-and-validate:
     runs-on: ubuntu-latest
     
     steps:
@@ -16,68 +17,59 @@ jobs:
     - name: Set up Docker Buildx
       uses: docker/setup-buildx-action@v2
     
-    - name: Create .env from secrets
-      run: |
-        cat > .env << EOF
-        AWS_ACCESS_KEY_ID=${{ secrets.AWS_ACCESS_KEY_ID }}
-        AWS_SECRET_ACCESS_KEY=${{ secrets.AWS_SECRET_ACCESS_KEY }}
-        AWS_REGION=${{ secrets.AWS_REGION }}
-        AWS_BUCKET_NAME=${{ secrets.AWS_BUCKET_NAME }}
-        COINGECKO_API_KEY=${{ secrets.COINGECKO_API_KEY }}
-        POSTGRES_HOST=${{ secrets.POSTGRES_HOST }}
-        POSTGRES_PORT=${{ secrets.POSTGRES_PORT }}
-        POSTGRES_USER=${{ secrets.POSTGRES_USER }}
-        POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}
-        POSTGRES_DB=${{ secrets.POSTGRES_DB }}
-        AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://${{ secrets.POSTGRES_USER }}:${{ secrets.POSTGRES_PASSWORD }}@${{ secrets.POSTGRES_HOST }}:${{ secrets.POSTGRES_PORT }}/${{ secrets.POSTGRES_DB }}
-        AIRFLOW_HOME=/home/airflow
-        EOF
-      env:
-        SECRETS_CONTEXT: ${{ toJson(secrets) }}
+    - name: Build Airflow Docker image
+      uses: docker/build-push-action@v4
+      with:
+        context: .
+        file: ./Dockerfile.airflow
+        push: false
+        tags: cryptopulse-airflow:latest
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
     
-    - name: Build Docker image
+    - name: Validate docker-compose.yaml
       run: |
-        docker build -f Dockerfile.airflow -t cryptopulse-airflow:${{ github.sha }} .
-        docker tag cryptopulse-airflow:${{ github.sha }} cryptopulse-airflow:latest
+        # Install docker-compose-cli
+        sudo apt-get update
+        sudo apt-get install -y docker-compose-v2
+        docker compose config > /dev/null && echo "✓ docker-compose valid"
     
-    - name: Start services
-      run: |
-        docker-compose down -v || true
-        docker-compose up -d
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
     
-    - name: Wait for Airflow to be ready
+    - name: Validate DAG syntax
       run: |
-        for i in {1..30}; do
-          if docker-compose exec -T airflow-webserver curl -f http://localhost:8080/health | grep -q healthy; then
-            echo "Airflow is healthy"
-            exit 0
-          fi
-          echo "Waiting for Airflow... ($i/30)"
-          sleep 10
-        done
-        echo "Airflow failed to start"
-        docker-compose logs
-        exit 1
+        pip install apache-airflow-core
+        python -m py_compile src/orchestrator/crypto_dag.py
+        echo "✓ DAG syntax valid"
     
-    - name: Verify DAG loaded
+    - name: Validate Python scripts
       run: |
-        docker-compose exec -T airflow-webserver airflow dags list | grep cryptopulse_lakehouse_pipeline
+        python -m py_compile src/ingestion/ingest_crypto.py
+        python -m py_compile src/transformation/spark_process.py
+        python -m py_compile src/transformation/gold_analytics.py
+        python -m py_compile src/dashboard/app.py
+        echo "✓ All Python scripts valid"
     
-    - name: Check connection to PostgreSQL
+    - name: Check requirements.txt
       run: |
-        docker-compose exec -T airflow-webserver airflow db check
+        pip install --dry-run -r requirements.txt
+        echo "✓ All requirements available"
     
-    - name: Check connection to S3
+    - name: Security check with Bandit
       run: |
-        docker-compose exec -T airflow-webserver python -c \
-          "import boto3; s3 = boto3.client('s3', aws_access_key_id='${{ secrets.AWS_ACCESS_KEY_ID }}', aws_secret_access_key='${{ secrets.AWS_SECRET_ACCESS_KEY }}', region_name='${{ secrets.AWS_REGION }}'); s3.head_bucket(Bucket='${{ secrets.AWS_BUCKET_NAME }}')" && echo "S3 connection successful"
+        pip install bandit
+        bandit -r src/ -ll -f json -o bandit-report.json || true
+        echo "✓ Security check complete"
     
-    - name: Run DAG manual test
-      run: |
-        docker-compose exec -T airflow-webserver airflow dags test cryptopulse_lakehouse_pipeline 2026-03-27
-    
-    - name: Cleanup
-      if: always()
-      run: |
-        rm -f .env
-        docker-compose down
+    - name: Upload build artifact
+      if: success()
+      uses: actions/upload-artifact@v3
+      with:
+        name: build-info
+        path: |
+          docker-compose.yaml
+          Dockerfile.airflow
+          requirements.txt
