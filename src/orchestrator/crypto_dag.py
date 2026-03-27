@@ -5,6 +5,7 @@ from airflow.operators.python import PythonOperator
 from datetime import datetime, timedelta
 import os
 import sys
+from pyathena import connect
 
 # Add src path for imports
 sys.path.insert(0, '/opt/airflow/src')
@@ -43,6 +44,52 @@ def run_ingestion():
         print("Ingestion completed successfully!")
     else:
         raise Exception("Failed to fetch data from CoinGecko")
+
+def repair_athena_partitions():
+    """
+    Executes MSCK REPAIR TABLE on all Gold Layer tables in Athena.
+    This updates partition metadata so Athena discovers new data automatically.
+    Essential for keeping Streamlit dashboard up-to-date without manual intervention.
+    """
+    print("Starting Athena partition repair...")
+    
+    # Get Athena configuration from environment
+    athena_database = os.getenv("ATHENA_DATABASE", "gold_layer")
+    athena_s3_staging_dir = os.getenv("ATHENA_S3_STAGING_DIR")
+    aws_region = os.getenv("AWS_REGION", "ap-southeast-2")
+    
+    if not athena_s3_staging_dir:
+        raise Exception("ATHENA_S3_STAGING_DIR environment variable not set")
+    
+    # Tables to repair
+    tables = ["market_leaders", "liquidity_analysis", "coin_trends"]
+    
+    # Connect to Athena
+    conn = connect(
+        region_name=aws_region,
+        s3_staging_dir=athena_s3_staging_dir,
+    )
+    
+    cursor = conn.cursor()
+    
+    try:
+        for table in tables:
+            repair_query = f"MSCK REPAIR TABLE {athena_database}.{table}"
+            print(f"Executing: {repair_query}")
+            cursor.execute(repair_query)
+            result = cursor.fetchall()
+            print(f"✓ {table} partition repair completed: {result}")
+        
+        print(f"SUCCESS: All {len(tables)} Gold tables are now up-to-date in Athena!")
+        print("→ Streamlit dashboard can now query latest data")
+    
+    except Exception as e:
+        print(f"ERROR: Athena partition repair failed: {str(e)}")
+        raise
+    
+    finally:
+        cursor.close()
+        conn.close()
 
 with DAG(
     'cryptopulse_lakehouse_pipeline',
@@ -97,5 +144,12 @@ with DAG(
         doc_md="PySpark: aggregate Silver → Gold (Data ready for Athena/Streamlit)",
     )
 
+    # Task 4: Repair Athena Partitions (Update metadata for Streamlit)
+    repair_athena = PythonOperator(
+        task_id='repair_athena_partitions',
+        python_callable=repair_athena_partitions,
+        doc_md="MSCK REPAIR TABLE: auto-update Athena partition metadata so Streamlit queries latest data",
+    )
+
     # Define the execution pipeline order
-    ingest_data >> spark_silver >> spark_gold
+    ingest_data >> spark_silver >> spark_gold >> repair_athena
