@@ -8,6 +8,7 @@ from pyspark.sql.functions import col, desc, round, avg, first, last, lit
 def create_spark_session():
     """
     Initializes Spark Session with S3A and AWS configurations and required packages.
+    Includes partitionOverwriteMode=dynamic to prevent data loss when overwriting partitions.
     """
     access_key = os.getenv("AWS_ACCESS_KEY_ID")
     secret_key = os.getenv("AWS_SECRET_ACCESS_KEY")
@@ -23,6 +24,7 @@ def create_spark_session():
         .config("spark.hadoop.fs.s3a.endpoint", f"s3.{region}.amazonaws.com") \
         .config("spark.hadoop.fs.s3a.path.style.access", "true") \
         .config("spark.hadoop.fs.s3a.aws.credentials.provider", "org.apache.hadoop.fs.s3a.SimpleAWSCredentialsProvider") \
+        .config("spark.sql.sources.partitionOverwriteMode", "dynamic") \
         .getOrCreate()
 
 def run_gold_transformation():
@@ -89,9 +91,10 @@ def run_gold_transformation():
     
     # Use Dynamic Partition Overwrite: only replaces the partition being written (today's date)
     # Preserves historical partitions while preventing duplicates if DAG runs multiple times on the same day
-    market_leaders.write.mode("overwrite").option("partitionOverwriteMode", "dynamic").partitionBy("report_date").parquet(f"{base_gold_path}/market_leaders/")
-    liquidity_analysis.write.mode("overwrite").option("partitionOverwriteMode", "dynamic").partitionBy("report_date").parquet(f"{base_gold_path}/liquidity_analysis/")
-    coin_trends.write.mode("overwrite").option("partitionOverwriteMode", "dynamic").partitionBy("report_date").parquet(f"{base_gold_path}/coin_trends/")
+    # Note: partitionOverwriteMode configured at SparkSession level (create_spark_session())
+    market_leaders.write.mode("overwrite").partitionBy("report_date").parquet(f"{base_gold_path}/market_leaders/")
+    liquidity_analysis.write.mode("overwrite").partitionBy("report_date").parquet(f"{base_gold_path}/liquidity_analysis/")
+    coin_trends.write.mode("overwrite").partitionBy("report_date").parquet(f"{base_gold_path}/coin_trends/")
 
     print(f"SUCCESS: All 3 Gold analytical tables created for {report_date}")
     spark.stop()

@@ -14,14 +14,12 @@ RUN apt-get update && \
 # Verify Java installation
 RUN java -version
 
-# Switch to airflow user and install Python packages
+# Copy requirements.txt from local into container
+COPY requirements.txt /tmp/requirements.txt
+
+# Switch to airflow user and install Python packages from requirements.txt
 USER airflow
-RUN pip install --no-cache-dir --retries 5 \
-    boto3==1.28.85 \
-    requests==2.31.0 \
-    python-dotenv==1.0.0 \
-    pyspark==3.5.0 \
-    psycopg2-binary==2.9.6
+RUN pip install --no-cache-dir --retries 5 -r /tmp/requirements.txt
 
 
 
