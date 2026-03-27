@@ -48,6 +48,12 @@ jobs:
         docker run --rm -v $(pwd)/src:/home/airflow/dags cryptopulse-airflow:latest \
           python -m py_compile /home/airflow/dags/orchestrator/crypto_dag.py
     
+    - name: Cleanup Docker cache
+      if: always()
+      run: |
+        sudo find src -type d -name __pycache__ -exec rm -rf {} + || true
+        sudo find src -type f -name "*.pyc" -delete || true
+    
     - name: Check Python syntax
       run: |
         docker run --rm -v $(pwd)/src:/workspace cryptopulse-airflow:latest \

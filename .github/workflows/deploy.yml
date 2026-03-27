@@ -27,6 +27,20 @@ jobs:
         cache-from: type=gha
         cache-to: type=gha,mode=max
     
+    - name: Create .env for validation
+      run: |
+        cat > .env << EOF
+        POSTGRES_HOST=localhost
+        POSTGRES_PORT=5432
+        POSTGRES_USER=postgres
+        POSTGRES_PASSWORD=dummy
+        POSTGRES_DB=postgres
+        AWS_REGION=ap-southeast-2
+        AWS_BUCKET_NAME=dummy-bucket
+        ATHENA_DATABASE=gold_layer
+        ATHENA_S3_STAGING_DIR=s3://dummy/staging/
+        EOF
+    
     - name: Validate docker-compose.yaml
       run: |
         # Install docker-compose-cli
