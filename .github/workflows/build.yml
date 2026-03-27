@@ -38,6 +38,11 @@ jobs:
         AIRFLOW_HOME=/home/airflow
         EOF
     
+    - name: Clean Python cache
+      run: |
+        find src -type d -name __pycache__ -exec rm -rf {} + || true
+        find src -type f -name "*.pyc" -delete || true
+    
     - name: Validate DAG syntax
       run: |
         docker run --rm -v $(pwd)/src:/home/airflow/dags cryptopulse-airflow:latest \
